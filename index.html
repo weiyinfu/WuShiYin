@@ -1,0 +1,302 @@
+<html>
+<head>
+  <title>日语五十音</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0"/>
+  <link rel="stylesheet/less" type="text/css" href="index.less"/>
+  <script src="https://cdn.bootcss.com/less.js/3.10.3/less.min.js"></script>
+  <script src="https://cdn.bootcss.com/vue/2.6.11/vue.js"></script>
+  <script src="https://cdn.bootcss.com/axios/0.19.2/axios.min.js"></script>
+</head>
+<body>
+<div id="main" @keydown="onKeydown" tabindex="-1" autofocus>
+  <div class="control">
+    <!--控制按钮区-->
+    <div><input type="checkbox" v-model="config.showPing" @change="saveConfig">显示平假名</div>
+    <div><input type="checkbox" v-model="config.showPian" @change="saveConfig">显示片假名</div>
+    <div><input type="checkbox" v-model="config.showPinyin" @change="saveConfig">显示拼音</div>
+    <div>阅读时间间隔:{{config.readWaitTime}}s<input type="range" min="0.1" max="2" step="0.1" v-model="config.readWaitTime"
+                                               @change="saveConfig"></div>
+    <div>字体大小:<input type="range" min="16" max="70" step="1" v-model="config.fontSize" @change="saveConfig"></div>
+    <button @click="play(japanese)">朗读全部</button>
+  </div>
+  <div class="japan">
+    <div v-for="v in japanese">
+      <!--javapanese是一个字典，key表示“清音、浊音、半浊音、拗音”，value表示音表。-->
+      <div style="text-align: center" @click="play(v)" class="playButton">{{v.name}}<span class="playIcon"></span></div>
+      <div v-for="line in v.table" class="line">
+        <div @click="play(line)" class="playButton"><span class="playIcon"></span></div>
+        <div v-for="i in line" @click="play(i)" class="grid" :class="{
+            playing:i&&i==playing,
+            item:i,
+          }"
+             :style="{fontSize:config.fontSize}">
+          <div v-if="i">
+            <span class="pingpian">
+              <span v-if="config.showPing" class="ping">{{i.char}}</span>
+              <span v-if="config.showPian" class="pian">{{getPian(i.char)}}</span>
+            </span>
+            <span v-if="config.showPinyin" class="pinyin">{{i.yin}}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+<script>
+  // 清音，特殊点：为了控制字母的排布，使用下划线表示空，应该忽略
+  const qingYin = `
+    あいうえお  a  i  u  e  o
+    かきくけこ  ka ki ku ke ko
+    さしすせそ  sa si su se so
+    たちつてと  ta ci cu te to
+    なにぬねの  na ni nu ne no
+    はひふへほ  ha hi hu he ho
+    まみむめも  ma mi mu me mo
+    や_ゆ_よ  ya _  yu _  yo
+    らりるれろ  ra ri ru re ro
+    わ___を  wa _ _ _  o
+    ん____   N _ _ _ _ `
+  // 浊音
+  const zhuoYin = `
+    がぎぐげご ga gi gu ge go
+    ざじずぜぞ za zi zu ze zo
+    だぢづでど da zi zu de do
+    ばびぶべぼ ba bi bu be bo
+    `
+  // 半浊音
+  const banZhuoYin = `ぱぴぷぺぽ pa pi pu pe po`
+  // 拗音，x表示拗音的第一部分的字和音，y表示拗音的第二部分的字和音
+  const aoYin = {
+    x: 'きしちにひみりぎじぢびぴ k s c n h m r g z z b p',
+    y: 'ゃゅょ ya yu yo'
+  }
+  // 平假名和片假名的对应关系
+  const pingPian = {
+    //平假名和片假名的对应关系，平假名和片假名各有43个，一共86个字符
+    ping: 'ぁあぃいぅうぇえぉおかがきぎくぐけげこごさざしじすずせぜそぞただちぢっつづてでとどなにぬねのはばぱひびぴふぶぷへべぺほぼぽまみむめもゃやゅゆょよらりるれろゎわゐゑをんゔゕゖ',
+    pian: 'ァアィイゥウェエォオカガキギクグケゲコゴサザシジスズセゼソゾタダチヂッツヅテデトドナニヌネノハバパヒビピフブプヘベペホボポマミムメモャヤュユョヨラリルレロヮワヰヱヲンヴヵヶ'
+  }
+
+  function parseLine(line) {
+    //解析一行，一行的格式为：字+音1+音2...，每个item之间以空格隔开，返回char+yin的列表
+    const items = line.split(/\s+/)
+    const chars = Array.from(items[0]), yin = items.slice(1)
+    let li = []
+    for (let i = 0; i < chars.length; i++) {
+      if (chars[i] === '_') li.push(null);
+      else {
+        li.push({char: chars[i], yin: yin[i]})
+      }
+    }
+    return li
+  }
+
+  function parseMultiLine(s) {
+    //平假名有多行，所以需要先分割成每一行
+    return s.split('\n').map(x => x.trim()).filter(x => x.length > 0).map(parseLine)
+  }
+
+  function parseAoYin() {
+    const x = parseLine(aoYin.x), y = parseLine(aoYin.y)
+    let a = []
+    for (let i of x) {
+      let line = []
+      for (let j of y) {
+        line.push({char: i.char + j.char, yin: i.yin + j.yin})
+      }
+      a.push(line)
+    }
+    return a
+  }
+
+  const japanese = [
+    {
+      name: "清音",
+      table: parseMultiLine(qingYin)
+    },
+    {
+      name: "浊音",
+      table: parseMultiLine(zhuoYin),
+    },
+    {
+      name: '半浊音',
+      table: parseMultiLine(banZhuoYin),
+    },
+    {
+      name: "拗音",
+      table: parseAoYin()
+    }
+  ]
+  const allYin = new Set()
+  const YinTable = [];//表格格式的五十音，用于使用键盘导航
+  for (let part of japanese) {
+    for (let line of part.table) {
+      for (let char of line) {
+        if (char) {
+          allYin.add(char.yin)
+        }
+      }
+      YinTable.push(line);
+    }
+  }
+  //为音添加x，y两个属性
+  for (let x = 0; x < YinTable.length; x++) {
+    for (let y = 0; y < YinTable[x].length; y++) {
+      let it = YinTable[x][y];
+      if (it) {
+        it.x = x;
+        it.y = y;
+      }
+    }
+  }
+  const main = {
+    data() {
+      return {
+        japanese,
+        playing: null,//正在播放的音频
+        playTaskId: 0,//当前是第几次播放任务
+        config: {
+          showPinyin: true,
+          showPian: true,
+          showPing: true,
+          fontSize: 30,//字体大小
+          readWaitTime: 0.3,
+        },
+      }
+    },
+    mounted() {
+      this.$el.focus();
+      this.loadConfig();
+    },
+    methods: {
+      getPian(pingChar) {
+        //根据平假名获取片假名
+        return Array.from(pingChar).map(x => {
+          const ind = pingPian.ping.indexOf(x)
+          if (ind === -1) throw 'not have ' + x
+          return pingPian.pian[ind]
+        }).join('')
+      },
+      saveConfig() {
+        //保存配置
+        localStorage.config = JSON.stringify(this.config)
+      },
+      loadConfig() {
+        if (localStorage.config) {
+          const config = JSON.parse(localStorage.config);
+          for (let i of Object.keys(this.config)) {
+            this.config[i] = config[i];
+          }
+        }
+      },
+      onKeydown(event) {
+        function legal(x, y) {
+          return x >= 0 && y >= 0 && x < YinTable.length && y < YinTable[x].length;
+        }
+
+        //如果是上下左右
+        const ind = ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].indexOf(event.key);
+        if (ind !== -1) {
+          if (this.playing === null) return;
+          const [dx, dy] = [[0, -1], [0, 1], [-1, 0], [1, 0]][ind]
+          let {x, y} = this.playing;
+          if (ind === 0 || ind === 1) {
+            const direction = [-1, 1][ind];
+            for (let xx = x; xx < YinTable.length && xx >= 0; xx += direction) {
+              let initY;
+              if (xx === x) initY = y + direction;
+              else initY = direction < 0 ? YinTable[xx].length - 1 : 0;
+              for (let yy = initY; yy < YinTable[xx].length && yy >= 0; yy += direction) {
+                if (YinTable[xx][yy]) {
+                  this.play(YinTable[xx][yy]);
+                  event.preventDefault();
+                  return;
+                }
+              }
+            }
+          }
+          while (legal(x + dx, y + dy)) {
+            x = x + dx;
+            y = y + dy;
+            if (YinTable[x][y]) {
+              this.play(YinTable[x][y])
+              event.preventDefault();
+              return;
+            }
+          }
+
+        } else {
+          console.log(event);
+        }
+      },
+      playMany(yin, ind, playTaskId) {
+        //不要直接调用playMany，应该调用play
+        //如果playTaskId发生改变，停止playMany
+        if (this.playTaskId !== playTaskId) return;
+        if (!ind && ind !== 0) throw new Error("error index " + ind);
+        if (ind === yin.length) return;//播放完毕了
+        //跳过
+        if (yin[ind] === null) {
+          this.playMany(yin, ind + 1, playTaskId)
+          return
+        }
+        //如果发现了空白，那么休息一段时间，起到停顿的效果
+        if (yin[ind] === " ") {
+          setTimeout(() => {
+            this.playMany(yin, ind + 1, playTaskId)
+          }, this.config.readWaitTime * 2000)
+          return
+        }
+        this.playing = yin[ind];
+        this.$refs[this.playing.yin].play()
+        setTimeout(() => {
+          this.playMany(yin, ind + 1, playTaskId)
+        }, this.config.readWaitTime * 1000)
+      },
+      play(yin) {
+        //如果是数组，展平之
+        function flatten(a) {
+          if (a instanceof Array) {
+            const ans = []
+            for (let i of a) {
+              for (let it of flatten(i)) {
+                //此处获取yin
+                ans.push(it);
+              }
+              ans.push(' ');
+            }
+            return ans;
+          } else {
+            if (a && a.table) {
+              return flatten(a.table);
+            } else {
+              return [a];
+            }
+          }
+        }
+
+        yin = flatten(yin);
+        console.log(yin.map(x => x ? x.yin : null).join(","))
+        this.playTaskId++;
+        this.playMany(yin, 0, this.playTaskId);
+      },
+    }
+  }
+  let haha = null
+  document.onreadystatechange = () => {
+    if (document.readyState !== 'complete') return
+    allYin.forEach(x => {
+      if (x === '_') return
+      const audio = document.createElement('audio')
+      audio.src = `wushiyin/${x}.mp3`
+      audio.setAttribute('ref', x)
+      audio.hidden = true
+      document.querySelector("#main").appendChild(audio)
+    })
+    main.el = "#main"
+    haha = new Vue(main)
+  }
+</script>
+</html>
