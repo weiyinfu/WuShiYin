@@ -1,48 +1,50 @@
 <html>
+
 <head>
   <title>日语五十音</title>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0"/>
-  <link rel="stylesheet/less" type="text/css" href="index.less"/>
-  <script src="https://cdn.bootcss.com/less.js/3.10.3/less.min.js"></script>
-  <script src="https://cdn.bootcss.com/vue/2.6.11/vue.js"></script>
-  <script src="https://cdn.bootcss.com/axios/0.19.2/axios.min.js"></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0" />
+  <link rel="stylesheet/less" type="text/css" href="index.less" />
+  <script src="https://weiyinfu.cn/cdn/less.min.js"></script>
+  <script src="https://weiyinfu.cn/cdn/vue.js"></script>
+  <script src="https://weiyinfu.cn/cdn/axios.min.js"></script>
 </head>
+
 <body>
-<div id="main" @keydown="onKeydown" tabindex="-1" autofocus>
-  <div class="control">
-    <!--控制按钮区-->
-    <div><input type="checkbox" v-model="config.showPing" @change="saveConfig">显示平假名</div>
-    <div><input type="checkbox" v-model="config.showPian" @change="saveConfig">显示片假名</div>
-    <div><input type="checkbox" v-model="config.showPinyin" @change="saveConfig">显示拼音</div>
-    <div>阅读时间间隔:{{config.readWaitTime}}s<input type="range" min="0.1" max="2" step="0.1" v-model="config.readWaitTime"
-                                               @change="saveConfig"></div>
-    <div>字体大小:<input type="range" min="16" max="70" step="1" v-model="config.fontSize" @change="saveConfig"></div>
-    <button @click="play(japanese)">朗读全部</button>
-  </div>
-  <div class="japan">
-    <div v-for="v in japanese">
-      <!--javapanese是一个字典，key表示“清音、浊音、半浊音、拗音”，value表示音表。-->
-      <div style="text-align: center" @click="play(v)" class="playButton">{{v.name}}<span class="playIcon"></span></div>
-      <div v-for="line in v.table" class="line">
-        <div @click="play(line)" class="playButton"><span class="playIcon"></span></div>
-        <div v-for="i in line" @click="play(i)" class="grid" :class="{
+  <div id="main" @keydown="onKeydown" tabindex="-1" autofocus>
+    <div class="control">
+      <!--控制按钮区-->
+      <div><input type="checkbox" v-model="config.showPing" @change="saveConfig">显示平假名</div>
+      <div><input type="checkbox" v-model="config.showPian" @change="saveConfig">显示片假名</div>
+      <div><input type="checkbox" v-model="config.showPinyin" @change="saveConfig">显示拼音</div>
+      <div>阅读时间间隔:{{config.readWaitTime}}s<input type="range" min="0.1" max="2" step="0.1" v-model="config.readWaitTime"
+          @change="saveConfig"></div>
+      <div>字体大小:<input type="range" min="16" max="70" step="1" v-model="config.fontSize" @change="saveConfig"></div>
+      <button @click="play(japanese)">朗读全部</button>
+    </div>
+    <div class="japan">
+      <div v-for="v in japanese">
+        <!--javapanese是一个字典，key表示“清音、浊音、半浊音、拗音”，value表示音表。-->
+        <div style="text-align: center" @click="play(v)" class="playButton">{{v.name}}<span class="playIcon"></span>
+        </div>
+        <div v-for="line in v.table" class="line">
+          <div @click="play(line)" class="playButton"><span class="playIcon"></span></div>
+          <div v-for="i in line" @click="play(i)" class="grid" :class="{
             playing:i&&i==playing,
             item:i,
-          }"
-             :style="{fontSize:config.fontSize}">
-          <div v-if="i">
-            <span class="pingpian">
-              <span v-if="config.showPing" class="ping">{{i.char}}</span>
-              <span v-if="config.showPian" class="pian">{{getPian(i.char)}}</span>
-            </span>
-            <span v-if="config.showPinyin" class="pinyin">{{i.yin}}</span>
+          }" :style="{fontSize:config.fontSize}">
+            <div v-if="i">
+              <span class="pingpian">
+                <span v-if="config.showPing" class="ping">{{i.char}}</span>
+                <span v-if="config.showPian" class="pian">{{getPian(i.char)}}</span>
+              </span>
+              <span v-if="config.showPinyin" class="pinyin">{{i.yin}}</span>
+            </div>
           </div>
         </div>
       </div>
     </div>
   </div>
-</div>
 </body>
 <script>
   // 清音，特殊点：为了控制字母的排布，使用下划线表示空，应该忽略
@@ -87,7 +89,7 @@
     for (let i = 0; i < chars.length; i++) {
       if (chars[i] === '_') li.push(null);
       else {
-        li.push({char: chars[i], yin: yin[i]})
+        li.push({ char: chars[i], yin: yin[i] })
       }
     }
     return li
@@ -104,7 +106,7 @@
     for (let i of x) {
       let line = []
       for (let j of y) {
-        line.push({char: i.char + j.char, yin: i.yin + j.yin})
+        line.push({ char: i.char + j.char, yin: i.yin + j.yin })
       }
       a.push(line)
     }
@@ -201,7 +203,7 @@
         if (ind !== -1) {
           if (this.playing === null) return;
           const [dx, dy] = [[0, -1], [0, 1], [-1, 0], [1, 0]][ind]
-          let {x, y} = this.playing;
+          let { x, y } = this.playing;
           if (ind === 0 || ind === 1) {
             const direction = [-1, 1][ind];
             for (let xx = x; xx < YinTable.length && xx >= 0; xx += direction) {
@@ -299,4 +301,5 @@
     haha = new Vue(main)
   }
 </script>
+
 </html>
